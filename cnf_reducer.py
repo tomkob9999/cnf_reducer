@@ -29,8 +29,8 @@ Usage:
     print("Satisfiable:", reducer.is_satisfiable())
 
 Author: Tomio Kobayashi
-Version: 1.0.1
-Date: 02/26/2025
+Version: 1.0.2
+Date: 02/27/2025
 """
 
 
@@ -256,7 +256,17 @@ class CNFReducer:
             if not CNFReducer.is_clause_satisfiable(g):
                 return False  # If any group is unsatisfiable, return False
         return True  # All groups are satisfiable
-    
+
+    def is_dnf_clause_satisfiable(dnf_clause):
+        if not dnf_clause:
+            return False
+        plus_set = set([a for a in dnf_clause if a > 0])  # Positive literals
+        minus_set = set([-a for a in dnf_clause if a < 0])  # Negative literals
+
+        if not (plus_set & minus_set):
+            return True
+        else:
+            return False
     
     def is_clause_satisfiable(cnf):
         """
@@ -268,36 +278,21 @@ class CNFReducer:
         if len(cnf) == 1:
             
             for dnf_clause in cnf[0]:
-                # dnf_clause = sorted([literal[0] for literal in cnf[0]])
-                
-                if not dnf_clause:
-                    continue
-                plus_set = set([a for a in dnf_clause if a > 0])  # Positive literals
-                minus_set = set([-a for a in dnf_clause if a < 0])  # Negative literals
-        
-                if not minus_set or not plus_set:
+                if CNFReducer.is_dnf_clause_satisfiable(dnf_clause):
                     return True
-                # **Check if there exists a literal without its negation**
-                for m in minus_set:
-                    if m not in plus_set:
-                        return True  # The clause is satisfiable
+                    
             return False
         # Recursively expand CNF into DNF
         rest_dnf = CNFReducer.cnf_to_dnf(cnf[1:], is_base=False)
         for literal in cnf[0]:
             for clause in rest_dnf:
                 # **Create a flat list of literals in the current clause**
+                    
                 dnf_clause = list(set(list(literal) + clause))
-                
-                plus_set = set([a for a in dnf_clause if a > 0])  # Positive literals
-                minus_set = set([-a for a in dnf_clause if a < 0])  # Negative literals
-    
-                if not minus_set or not plus_set:
+                if CNFReducer.is_dnf_clause_satisfiable(dnf_clause):
                     return True
-                # **Check if there exists a literal without its negation**
-                for m in minus_set:
-                    if m not in plus_set:
-                        return True  # The clause is satisfiable
+
+
         return False  # If all clauses contain contradictions, return False
 
     def generate_flat_dnf_set(self):
@@ -339,59 +334,3 @@ class CNFReducer:
             })
     
         return stats
-
-if __name__ == "__main__":
-    test_cases = [
-        {
-            "input": [[1, 2, 3], [1, 2, 4], [2, 4, 6], [2, 3, 6]],
-            "expected": [[[(1, 6), (2,), (3, 4)]]]
-        }
-    ]
-
-    for i, case in enumerate(test_cases):
-        print("input", case["input"])
-        reducer = CNFReducer(case["input"])
-        reducer.solve()
-        print(f"\n🔹 **Test {i+1}**")
-        print("Input CNF:", case["input"])
-        print("Reduced CNF:", reducer.reduced_cnf)
-        print("is_satisfiable:", reducer.is_satisfiable())
-        if isinstance(case["expected"], list):
-            if reducer.reduced_cnf == case["expected"]:
-                print("✅ Test Passed")
-            else:
-                print("❌ Test Failed")
-
-
-
-input = [[1, 2, 3], [1, 2, 4], [2, 4, 6], [2, 3, 6]]
-input = [[1, 2, 3], [1, 2, 4], [11, 13, 15], [2, 4, 6], [2, 3, 6]]
-input = [["A", "B", "C"], ["A", "B", "D"], ["B", "D", "F"], ["B", "C", "F"]]
-reducer = CNFReducer(input, use_string=True)
-reduced_cnf_org = reducer.solve()
-print("reduced_cnf  :", reducer.reduced_cnf)
-print("reduced_cnf_org:", reduced_cnf_org)
-print("reducer.find_stats():", reducer.find_stats())
-
-for dnf_clause in reducer.convert_to_dnf(use_string=False):
-    print("====================")
-    print(dnf_clause)
-
-
-input = [[4, -18, 19], [3, 18, -5], [-5, -8, -15], [-20, 7, -16], [10, -13, -7], [-12, -9, 17], [17, 19, 5], [-16, 9, 15], [11, -5, -14], 
-       [18, -10, 13], [-3, 11, 12], [-6, -17, -8], [-18, 14, 1], [-19, -15, 10], [12, 18, -19], [-8, 4, 7], [-8, -9, 4], [7, 17, -15], 
-       [12, -7, -14], [-10, -11, 8], [2, -15, -11], [9, 6, 1], [-11, 20, -17], [9, -15, 13], [12, -7, -17], [-18, -2, 20], [20, 12, 4], 
-       [19, 11, 14], [-16, 18, -4], [-1, -17, -19], [-13, 15, 10], [-12, -14, -13], [12, -14, -7], [-7, 16, 10], [6, 10, 7], [20, 14, -16], 
-       [-19, 17, 11], [-7, 1, -20], [-5, 12, 15], [-4, -9, -13], [12, -11, -7], [-5, 19, -8], [1, 16, 17], [20, -14, -15], [13, -4, 10], 
-       [14, 7, 10], [-5, 9, 20], [10, 1, -19], [-16, -15, -1], [16, 3, -11], [-15, -10, 4], [4, -15, -3], [-10, -16, 11], [-8, 12, -5], 
-       [14, -6, 12], [1, 6, 11], [-13, -5, -1], [-7, -2, 12], [1, -20, 19], [-2, -13, -8], [15, 18, 4], [-11, 14, 9], [-6, -15, -2], 
-       [5, -12, -15], [-6, 17, 5], [-13, 5, -19], [20, -1, 14], [9, -17, 15], [-5, 19, -18], [-12, 8, -10], [-18, 14, -4], [15, -9, 13], 
-       [9, -5, -1], [10, -19, -14], [20, 9, 4], [-9, -2, 19], [-5, 13, -17],[2, -10, -18], [-18, 3, 11], [7, -9, 17],[-15, -6, -3],
-       [-2, 3, -13], [12, 3, -2], [-2, -3, 17], [20, -15, -16], [-5, -17, -19], [-20, -18, 11], [-9, 1, -5], [-19, 9, 17], [12, -2, 17]
-      ]
-
-reducer = CNFReducer(input, use_string=False)
-reduced_cnf_org = reducer.solve()
-print("reduced_cnf  :", reducer.reduced_cnf)
-print("reduced_cnf_org:", reduced_cnf_org)
-print("reducer.find_stats():", reducer.find_stats())
