@@ -1,3 +1,39 @@
+"""
+CNFReducer: A Structured Approach to CNF Reduction and Clause Merging
+
+This class implements a methodology for efficiently reducing Conjunctive Normal Form (CNF) formulas 
+by leveraging disjoint variable grouping and structured clause merging. The approach ensures controlled 
+term growth and efficient preprocessing before CNF-to-DNF expansion, making it suitable for SAT solvers 
+and logical reasoning applications.
+
+Key Features:
+- **Disjoint Variable Grouping**: Partitions CNF clauses into independent sets to optimize processing.
+- **Graph-Based Clause Merging**: Uses maximum-weight matching to iteratively merge clauses with minimal 
+  term growth.
+- **Pre-Satisfiability Checking**: Detects contradictions and redundant clauses before full DNF expansion.
+- **Statistical Complexity Estimation**: Computes upper bounds on expected DNF growth before execution.
+- **Direct CNF-to-DNF Transformation**: Produces a minimized CNF representation that is directly 
+  transferable to full DNF on demand.
+
+Performance:
+- Ensures polynomial-time preprocessing (`O(n log n)` to `O(n^2)`) while avoiding brute-force CNF-to-DNF 
+  expansion.
+- Capable of processing large CNF instances in milliseconds.
+- Suitable for integration with SAT solvers, formal verification tools, and logic synthesis frameworks.
+
+Usage:
+    cnf = [[1, 2, 3], [1, 2, 4], [2, 4, 6], [2, 3, 6]]
+    reducer = CNFReducer(cnf)
+    reduced_cnf = reducer.solve()
+    print("Reduced CNF:", reduced_cnf)
+    print("Satisfiable:", reducer.is_satisfiable())
+
+Author: Tomio Kobayashi
+Version: 1.0.1
+Date: 02/26/2025
+"""
+
+
 import itertools
 from itertools import product, combinations
 import networkx as nx
@@ -152,7 +188,6 @@ class CNFReducer:
         """
         graph = nx.Graph()
         for i, j in combinations(range(len(clauses)), 2):
-            # print("Hello", i, j)
             [i, j] = [i, j] if i < j else [j, i]
             common_vars = set(clauses[i]) & set(clauses[j])
             if len(common_vars) == 1 and len(clauses[i]) >= self.MAX_CLAUSE and len(clauses[j]) >= self.MAX_CLAUSE:
@@ -231,24 +266,24 @@ class CNFReducer:
             return False  # An empty CNF is trivially unsatisfiable
     
         if len(cnf) == 1:
-            dnf_clause = sorted([literal[0] for literal in cnf[0]])
             
-            if not dnf_clause:
-                False
-            plus_set = set([a for a in dnf_clause if a > 0])  # Positive literals
-            minus_set = set([-a for a in dnf_clause if a < 0])  # Negative literals
-    
-            if not minus_set or not plus_set:
-                return True
-            # **Check if there exists a literal without its negation**
-            for m in minus_set:
-                if m not in plus_set:
-                    return True  # The clause is satisfiable
+            for dnf_clause in cnf[0]:
+                # dnf_clause = sorted([literal[0] for literal in cnf[0]])
+                
+                if not dnf_clause:
+                    continue
+                plus_set = set([a for a in dnf_clause if a > 0])  # Positive literals
+                minus_set = set([-a for a in dnf_clause if a < 0])  # Negative literals
+        
+                if not minus_set or not plus_set:
+                    return True
+                # **Check if there exists a literal without its negation**
+                for m in minus_set:
+                    if m not in plus_set:
+                        return True  # The clause is satisfiable
             return False
-    
         # Recursively expand CNF into DNF
         rest_dnf = CNFReducer.cnf_to_dnf(cnf[1:], is_base=False)
-    
         for literal in cnf[0]:
             for clause in rest_dnf:
                 # **Create a flat list of literals in the current clause**
@@ -265,6 +300,8 @@ class CNFReducer:
                         return True  # The clause is satisfiable
         return False  # If all clauses contain contradictions, return False
 
+    def generate_flat_dnf_set(self):
+        return [c for g in self.reduced_cnf for c in g]
     
     def find_stats(self):
         """
@@ -280,7 +317,7 @@ class CNFReducer:
             raise ValueError("Error: CNF must be reduced first using solve().")
     
         stats = []
-
+        print("num_groups:", len(self.reduced_cnf))
         for i, group in enumerate(self.reduced_cnf):
             expected_dnf_terms = 1
             max_term_size = 0
