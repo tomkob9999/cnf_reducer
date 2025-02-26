@@ -29,7 +29,7 @@ Usage:
     print("Satisfiable:", reducer.is_satisfiable())
 
 Author: Tomio Kobayashi
-Version: 1.0.2
+Version: 1.0.3
 Date: 02/27/2025
 """
 
@@ -273,7 +273,7 @@ class CNFReducer:
         Converts CNF to DNF and checks if at least one clause in the group is satisfiable.
         """
         if not cnf:
-            return False  # An empty CNF is trivially unsatisfiable
+            return True  # An empty CNF is satisfiable as all elements have been contradictory.
     
         if len(cnf) == 1:
             
@@ -282,18 +282,17 @@ class CNFReducer:
                     return True
                     
             return False
-        # Recursively expand CNF into DNF
-        rest_dnf = CNFReducer.cnf_to_dnf(cnf[1:], is_base=False)
-        for literal in cnf[0]:
-            for clause in rest_dnf:
-                # **Create a flat list of literals in the current clause**
-                    
-                dnf_clause = list(set(list(literal) + clause))
-                if CNFReducer.is_dnf_clause_satisfiable(dnf_clause):
-                    return True
-
-
-        return False  # If all clauses contain contradictions, return False
+        else:
+            # Recursively expand CNF into DNF
+            rest_dnf = CNFReducer.cnf_to_dnf(cnf[1:], is_base=False)
+            for literal in cnf[0]:
+                for clause in rest_dnf:
+                    # **Create a flat list of literals in the current clause**
+                        
+                    dnf_clause = list(set(list(literal) + clause))
+                    if CNFReducer.is_dnf_clause_satisfiable(dnf_clause):
+                        return True
+            return False  # If all clauses contain contradictions, return False
 
     def generate_flat_dnf_set(self):
         return [c for g in self.reduced_cnf for c in g]
