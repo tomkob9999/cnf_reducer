@@ -29,8 +29,8 @@ Usage:
     print("Satisfiable:", reducer.is_satisfiable())
 
 Author: Tomio Kobayashi
-Version: 1.0.4
-Date: 02/27/2025
+Version: 1.0.6
+Date: 02/28/2025
 """
 
 
@@ -245,11 +245,17 @@ class CNFReducer:
             yield flattened  # Yield line by line
 
     
-    def is_satisfiable(inp):
+    def is_satisfiable(inp, bfs_mode=False):
         # simplify_3sat is called to ignore variables that have non-pos-neg pairs.
-        reducer = CNFReducer(CNFReducer.simplify_3sat(inp))
-        reducer.solve()
-        return reducer.is_satisfiable_raw()
+        if bfs_mode:
+            max_clause=20
+            reducer = CNFReducer(CNFReducer.simplify_3sat(inp), max_clause=max_clause)
+            reducer.solve()
+            return reducer.is_satisfiable_raw_bfs()
+        else:
+            reducer = CNFReducer(CNFReducer.simplify_3sat(inp))
+            reducer.solve()
+            return reducer.is_satisfiable_raw()
         
 
     def is_satisfiable_raw(self):
@@ -356,18 +362,65 @@ class CNFReducer:
         # return new_clauses, single_set, replacement_value
         return new_clauses
 
-# Small test
+    def is_satisfiable_raw_bfs(self):
+        """
+        Uses tuples for path tracking, ensuring immutability and fast deduplication.
+        """
+
+        clauses = self.generate_flat_dnf_set()
+        # variables = sorted({abs(lit) for clause in clauses for lit in clause})  # Extract sorted variables
+        variables = sorted({abs(v) for clause in clauses for lit in clause for v in lit})  # Extract sorted variables
+        var_index = {var: i for i, var in enumerate(variables)}  # Map variables to tuple index
+        num_vars = len(var_index)
+    
+        paths = {tuple([0] * num_vars)}  # Initial path (all variables unassigned)
+        
+        for clause in clauses:
+            new_paths = set()  # Store unique new paths
+    
+            for path in paths:
+                local_new_paths = set()
+    
+                # for lit in clause:
+                for c in clause:
+                    new_path = list(path)  # Convert tuple to list for modification
+                    jump_out = False
+                    for lit in c:
+                        var_idx = var_index[abs(lit)]
+                        sign = 1 if lit > 0 else -1
+                        if path[var_idx] == -sign:  # Conflict: discard this path
+                            # continue
+                            jump_out = True
+                            break
+                        new_path[var_idx] = sign
+                    # if path[var_idx] == 0:  # Unassigned variable, create a new path
+                    if not jump_out:  # Unassigned variable, create a new path
+                        # new_path[var_idx] = sign
+                        local_new_paths.add(tuple(new_path))  # Convert back to tuple for O(1) lookup
+    
+                if local_new_paths:
+                    new_paths.update(local_new_paths)
+    
+            # **Drop Old Paths Explicitly**  
+            paths = new_paths  # Only retain the new unique paths
+            # print("len(paths)", len(paths))
+            if not paths:  # If all paths are invalidated, return UNSAT
+                return False  
+
+        return True  # If at least one valid path remains, return SAT
+                        
+# if __name__ == "__main__":
 test_cases = [
     {
         # "input": [[1, 2, 3], [1, 2, 4], [2, 4, 6], [2, 3, 6]],
         # "input": [[1, 2, 3], [1, 4, 5], [1, 7, 8],[-8, 12, 13], [9, 10, 11]],
-        "input": [[1, 2, 3], [1, 4, 5],[-5, 12, 13], [9, 10, 11]],
+        # "input": [[1, 2, 3], [1, 4, 5],[-5, 12, 13], [9, 10, 11]],
         # "input": [[1, 2, 3, 10, 11], [1, 4, 5, 6, 7, 8, 9]],
         # "input": [[1, 2, 3], [-1]],
         # "input": [[1, -1, 3], [4]],
         # "input": [[1, 2, 3], [2, 5]],
         # "input": [[1, -1]],
-        # "input": [[1], [-1]],
+        "input": [[1], [-1]],
         "expected": [[[(1, 6), (2,), (3, 4)]]]
     }
 ]
@@ -380,6 +433,7 @@ for i, case in enumerate(test_cases):
     print("Input CNF:", case["input"])
     print("Reduced CNF:", reducer.reduced_cnf)
     print("CNFReducer.is_satisfiable():", CNFReducer.is_satisfiable(case["input"]))
+    print("CNFReducer.is_satisfiable():", CNFReducer.is_satisfiable(case["input"], bfs_mode=True))
     # if isinstance(case["expected"], list):
     #     if reducer.reduced_cnf == case["expected"]:
     #         print("✅ Test Passed")
@@ -387,5 +441,70 @@ for i, case in enumerate(test_cases):
     #         print("❌ Test Failed")
     # print(reducer.convert_to_dnf())
 
-flat_reduced_cnf = reducer.generate_flat_dnf_set()
-flat_reduced_cnf
+# flat_reduced_cnf = reducer.generate_flat_dnf_set()
+# flat_reduced_cnf
+
+
+input = [[1, 2, 3], [1, 2, 4], [2, 4, 6], [2, 3, 6]]
+input = [[1, 2, 3], [1, 2, 4], [11, 13, 15], [2, 4, 6], [2, 3, 6]]
+input = [["A", "B", "C"], ["A", "B", "D"], ["B", "D", "F"], ["B", "C", "F"]]
+input = [
+    ["a", "b", "c"],
+    ["b", "c", "-d"],
+    ["-c", "d", "e"],
+    ["a", "-d", "e"],
+    ["-a", "b", "e"],
+    ["b", "-c", "e"],
+    ["a", "-c", "-d"],
+    ["-b", "d", "e"],
+    ["a", "-b", "d"],
+    ["-c", "d", "e"],
+    ["a", "-c", "e"],
+    ["-b", "-c", "d"]
+]
+
+reducer = CNFReducer(input, use_string=True)
+reduced_cnf_org = reducer.solve()
+print("reduced_cnf  :", reducer.reduced_cnf)
+print("reduced_cnf_org:", reduced_cnf_org)
+print("reducer.find_stats():", reducer.find_stats())
+print("CNFReducer.is_satisfiable():", CNFReducer.is_satisfiable(case["input"]))
+print("CNFReducer.is_satisfiable():", CNFReducer.is_satisfiable(case["input"], bfs_mode=True))
+print("reducer.convert_to_dnf():", reducer.convert_to_dnf(use_string=True))
+
+
+import time
+
+input = [[4, -18, 19], [3, 18, -5], [-5, -8, -15], [-20, 7, -16], [10, -13, -7], [-12, -9, 17], [17, 19, 5], [-16, 9, 15], [11, -5, -14], 
+       [18, -10, 13], [-3, 11, 12], [-6, -17, -8], [-18, 14, 1], [-19, -15, 10], [12, 18, -19], [-8, 4, 7], [-8, -9, 4], [7, 17, -15], 
+       [12, -7, -14], [-10, -11, 8], [2, -15, -11], [9, 6, 1], [-11, 20, -17], [9, -15, 13], [12, -7, -17], [-18, -2, 20], [20, 12, 4], 
+       [19, 11, 14], [-16, 18, -4], [-1, -17, -19], [-13, 15, 10], [-12, -14, -13], [12, -14, -7], [-7, 16, 10], [6, 10, 7], [20, 14, -16], 
+       [-19, 17, 11], [-7, 1, -20], [-5, 12, 15], [-4, -9, -13], [12, -11, -7], [-5, 19, -8], [1, 16, 17], [20, -14, -15], [13, -4, 10], 
+       [14, 7, 10], [-5, 9, 20], [10, 1, -19], [-16, -15, -1], [16, 3, -11], [-15, -10, 4], [4, -15, -3], [-10, -16, 11], [-8, 12, -5], 
+       [14, -6, 12], [1, 6, 11], [-13, -5, -1], [-7, -2, 12], [1, -20, 19], [-2, -13, -8], [15, 18, 4], [-11, 14, 9], [-6, -15, -2], 
+       [5, -12, -15], [-6, 17, 5], [-13, 5, -19], [20, -1, 14], [9, -17, 15], [-5, 19, -18], [-12, 8, -10], [-18, 14, -4], [15, -9, 13], 
+       [9, -5, -1], [10, -19, -14], [20, 9, 4], [-9, -2, 19], [-5, 13, -17],[2, -10, -18], [-18, 3, 11], [7, -9, 17],[-15, -6, -3],
+       [-2, 3, -13], [12, 3, -2], [-2, -3, 17], [20, -15, -16], [-5, -17, -19], [-20, -18, 11], [-9, 1, -5], [-19, 9, 17], [12, -2, 17]
+      ]
+
+reducer = CNFReducer(input, use_string=False, max_clause=20)
+reduced_cnf_org = reducer.solve()
+# print("reduced_cnf  :", reducer.reduced_cnf)
+# print("reduced_cnf_org:", reduced_cnf_org)
+print("reducer.find_stats():", reducer.find_stats())
+print("input size", len(input))
+print("output size", len(reducer.reduced_cnf[0]))
+
+# # Measure execution time
+# start_time = time.time()
+# print("CNFReducer.is_satisfiable():", CNFReducer.is_satisfiable(input))
+# end_time = time.time()
+# execution_time = end_time - start_time
+# print(execution_time)
+
+# Measure execution time
+start_time = time.time()
+print("CNFReducer.is_satisfiable(bfs_mode=True):", CNFReducer.is_satisfiable(input, bfs_mode=True))
+end_time = time.time()
+execution_time = end_time - start_time
+print(execution_time)
