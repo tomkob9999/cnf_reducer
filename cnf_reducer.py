@@ -29,7 +29,7 @@ Usage:
     print("Satisfiable:", reducer.is_satisfiable())
 
 Author: Tomio Kobayashi
-Version: 1.0.3
+Version: 1.0.4
 Date: 02/27/2025
 """
 
@@ -208,91 +208,87 @@ class CNFReducer:
             else:
                 yield dnf_clause
 
+    def convert_to_dnf(self, use_string=False):
+        # print("convert_to_dnf", use_string)
+        output = []
+        for g in self.reduced_cnf:
+            dnf = []
+            for dnf_clause in CNFReducer.cnf_to_dnf_line(g):
+                if not dnf_clause:
+                    continue
+                if self.use_string and use_string:
+                    dnf_clause_copy = copy.deepcopy(dnf_clause) 
+                    # print("dnf_clause", dnf_clause)
+                    
+                    # for i, clause in enumerate(dnf_clause_copy):
+                    #     print("i", i)
+                    #     print("clause", clause)
+                        
+                    #     dnf_clause_copy[i] = [self.mapper_fr_int[t] if t >= 0 else "-" + self.mapper_fr_int[t*-1] for t in clause]
+                    # print(dnf_clause_copy)
 
-    def cnf_to_dnf(cnf, is_base=True):
-        if not cnf:
-            return []
-        
-        # Base case: Convert single clause CNF into a sorted list of literals
-        if len(cnf) == 1:
-            return sorted([list(literal) for literal in cnf[0]])
-    
-        # Recursive step
-        rest_dnf = CNFReducer.cnf_to_dnf(cnf[1:], is_base=False)
-    
-        # Expand CNF into DNF while avoiding redundancy
-        result = []
-        minimal_result = set() if is_base else None  # Track minimal terms only at base level
-    
-        for literal in cnf[0]:
-            for clause in rest_dnf:
-                new_clause = sorted(set(list(literal) + clause))
-    
-                if is_base:
-                    new_clause_set = frozenset(new_clause)
-    
-                    # **Skip if it's already covered by a smaller term**
-                    if any(existing.issubset(new_clause_set) for existing in minimal_result):
-                        continue  
-    
-                    # **Remove larger clauses that the new one replaces**
-                    to_remove = {existing for existing in minimal_result if new_clause_set.issubset(existing)}
-                    minimal_result -= to_remove  # Efficiently remove redundant larger terms
-    
-                    minimal_result.add(new_clause_set)  # Add only minimal term
+                    dnf_clause_copy  = [self.mapper_fr_int[t] if t >= 0 else "-" + self.mapper_fr_int[t*-1] for t in dnf_clause_copy]
+                    dnf.append(dnf_clause_copy)
                 else:
-                    result.append(new_clause)
+                    # print(dnf_clause)
+                    dnf.append(dnf_clause)
+            output.append(dnf)
+            
+        return output
+
     
-        # Convert minimal_result back to sorted lists if `is_base=True`
-        return [sorted(list(clause)) for clause in minimal_result] if is_base else result
+    def cnf_to_dnf_line(group):
+        # for combination in product(*group):
+        #     yield list(combination)  # Yielding one combination at a time
+        for combination in product(*group):  # Generate Cartesian product
+            flattened = sorted(set([item for subtuple in combination for item in subtuple]))  # Flatten tuples
+            yield flattened  # Yield line by line
 
+    
+    def is_satisfiable(inp):
+        # simplify_3sat is called to ignore variables that have non-pos-neg pairs.
+        reducer = CNFReducer(CNFReducer.simplify_3sat(inp))
+        reducer.solve()
+        return reducer.is_satisfiable_raw()
+        
 
-    def is_satisfiable(self):
+    def is_satisfiable_raw(self):
         """
         Convert a reduced CNF (where each literal is a tuple) to DNF by expanding tuples.
         For literals of length 1, we treat them as scalars.
         """
         for g in self.reduced_cnf:
-            if not CNFReducer.is_clause_satisfiable(g):
+            if not CNFReducer.is_group_satisfiable(g):
                 return False  # If any group is unsatisfiable, return False
         return True  # All groups are satisfiable
 
+    def is_group_satisfiable(g):
+        """
+        Converts CNF to DNF and checks if at least one clause in the group is satisfiable.
+        """
+        dnf = []
+        for dnf_clause in CNFReducer.cnf_to_dnf_line(g):
+            if not dnf_clause:
+                continue
+            # if CNFReducer.is_dnf_clause_satisfiable(dnf_clause):
+            res = CNFReducer.is_dnf_clause_satisfiable(dnf_clause)
+            if res:
+                # print("Satisfiable DNF clause detected:")
+                # print(dnf_clause)
+                return True
+        return False
+
+    
     def is_dnf_clause_satisfiable(dnf_clause):
         if not dnf_clause:
             return False
         plus_set = set([a for a in dnf_clause if a > 0])  # Positive literals
         minus_set = set([-a for a in dnf_clause if a < 0])  # Negative literals
-
         if not (plus_set & minus_set):
             return True
         else:
             return False
-    
-    def is_clause_satisfiable(cnf):
-        """
-        Converts CNF to DNF and checks if at least one clause in the group is satisfiable.
-        """
-        if not cnf:
-            return True  # An empty CNF is satisfiable as all elements have been contradictory.
-    
-        if len(cnf) == 1:
-            
-            for dnf_clause in cnf[0]:
-                if CNFReducer.is_dnf_clause_satisfiable(dnf_clause):
-                    return True
-                    
-            return False
-        else:
-            # Recursively expand CNF into DNF
-            rest_dnf = CNFReducer.cnf_to_dnf(cnf[1:], is_base=False)
-            for literal in cnf[0]:
-                for clause in rest_dnf:
-                    # **Create a flat list of literals in the current clause**
-                        
-                    dnf_clause = list(set(list(literal) + clause))
-                    if CNFReducer.is_dnf_clause_satisfiable(dnf_clause):
-                        return True
-            return False  # If all clauses contain contradictions, return False
+
 
     def generate_flat_dnf_set(self):
         return [c for g in self.reduced_cnf for c in g]
@@ -333,3 +329,63 @@ class CNFReducer:
             })
     
         return stats
+        
+    # This version replaced non_pos_neg variables with max+1
+    def simplify_3sat(clauses):
+        # Step 1: Extract all unique variables and find max value
+        all_variables = {abs(lit) for clause in clauses for lit in clause}
+        if not all_variables:
+            return [[]]
+        max_val = max(all_variables)
+    
+        # Step 2: Split into positive and negative sets
+        positive_set = {lit for clause in clauses for lit in clause if lit > 0}
+        negative_set = {-lit for clause in clauses for lit in clause if lit < 0}
+    
+        # Step 3: Identify variables that exist in only one set
+        single_set = (positive_set | negative_set) - (positive_set & negative_set)
+    
+        # Step 4: Replace all occurrences in clauses with max_val + 1
+        replacement_value = max_val + 1
+        new_clauses = []
+        for clause in clauses:
+            new_clause = [replacement_value if abs(lit) in single_set else lit for lit in clause]
+            if len(new_clause) != 1 or new_clause[0] != replacement_value:
+                new_clauses.append(sorted(set(new_clause)))  # Remove duplicates
+    
+        # return new_clauses, single_set, replacement_value
+        return new_clauses
+
+# Small test
+test_cases = [
+    {
+        # "input": [[1, 2, 3], [1, 2, 4], [2, 4, 6], [2, 3, 6]],
+        # "input": [[1, 2, 3], [1, 4, 5], [1, 7, 8],[-8, 12, 13], [9, 10, 11]],
+        "input": [[1, 2, 3], [1, 4, 5],[-5, 12, 13], [9, 10, 11]],
+        # "input": [[1, 2, 3, 10, 11], [1, 4, 5, 6, 7, 8, 9]],
+        # "input": [[1, 2, 3], [-1]],
+        # "input": [[1, -1, 3], [4]],
+        # "input": [[1, 2, 3], [2, 5]],
+        # "input": [[1, -1]],
+        # "input": [[1], [-1]],
+        "expected": [[[(1, 6), (2,), (3, 4)]]]
+    }
+]
+print("START")
+for i, case in enumerate(test_cases):
+    print("input", case["input"])
+    reducer = CNFReducer(case["input"])
+    reducer.solve()
+    print(f"\n🔹 **Test {i+1}**")
+    print("Input CNF:", case["input"])
+    print("Reduced CNF:", reducer.reduced_cnf)
+    print("CNFReducer.is_satisfiable():", CNFReducer.is_satisfiable(case["input"]))
+    # if isinstance(case["expected"], list):
+    #     if reducer.reduced_cnf == case["expected"]:
+    #         print("✅ Test Passed")
+    #     else:
+    #         print("❌ Test Failed")
+    # print(reducer.convert_to_dnf())
+
+flat_reduced_cnf = reducer.generate_flat_dnf_set()
+flat_reduced_cnf
