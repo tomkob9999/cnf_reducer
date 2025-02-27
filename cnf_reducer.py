@@ -29,7 +29,7 @@ Usage:
     print("Satisfiable:", reducer.is_satisfiable())
 
 Author: Tomio Kobayashi
-Version: 1.0.6
+Version: 1.0.7
 Date: 02/28/2025
 """
 
@@ -249,7 +249,8 @@ class CNFReducer:
         # simplify_3sat is called to ignore variables that have non-pos-neg pairs.
         if bfs_mode:
             max_clause=20
-            reducer = CNFReducer(CNFReducer.simplify_3sat(inp), max_clause=max_clause)
+            # reducer = CNFReducer(CNFReducer.simplify_3sat(inp), max_clause=max_clause)
+            reducer = CNFReducer(inp, max_clause=max_clause)
             reducer.solve()
             return reducer.is_satisfiable_raw_bfs()
         else:
@@ -296,6 +297,54 @@ class CNFReducer:
             return False
 
 
+    def is_satisfiable_raw_bfs(self):
+        """
+        Uses tuples for path tracking, ensuring immutability and fast deduplication.
+        """
+
+        clauses = self.generate_flat_dnf_set()
+        # variables = sorted({abs(lit) for clause in clauses for lit in clause})  # Extract sorted variables
+        variables = sorted({abs(v) for clause in clauses for lit in clause for v in lit})  # Extract sorted variables
+        var_index = {var: i for i, var in enumerate(variables)}  # Map variables to tuple index
+        num_vars = len(var_index)
+    
+        paths = {tuple([0] * num_vars)}  # Initial path (all variables unassigned)
+        
+        for clause in clauses:
+            new_paths = set()  # Store unique new paths
+    
+            for path in paths:
+                local_new_paths = set()
+    
+                # for lit in clause:
+                for c in clause:
+                    new_path = list(path)  # Convert tuple to list for modification
+                    jump_out = False
+                    for lit in c:
+                        var_idx = var_index[abs(lit)]
+                        sign = 1 if lit > 0 else -1
+                        if path[var_idx] == -sign:  # Conflict: discard this path
+                            # continue
+                            jump_out = True
+                            break
+                        new_path[var_idx] = sign
+                    # if path[var_idx] == 0:  # Unassigned variable, create a new path
+                    if not jump_out:  # Unassigned variable, create a new path
+                        # new_path[var_idx] = sign
+                        local_new_paths.add(tuple(new_path))  # Convert back to tuple for O(1) lookup
+    
+                if local_new_paths:
+                    new_paths.update(local_new_paths)
+    
+            # **Drop Old Paths Explicitly**  
+            paths = new_paths  # Only retain the new unique paths
+            # print("len(paths)", len(paths))
+            if not paths:  # If all paths are invalidated, return UNSAT
+                return False  
+
+        return True  # If at least one valid path remains, return SAT
+
+    
     def generate_flat_dnf_set(self):
         return [c for g in self.reduced_cnf for c in g]
     
@@ -361,53 +410,6 @@ class CNFReducer:
     
         # return new_clauses, single_set, replacement_value
         return new_clauses
-
-    def is_satisfiable_raw_bfs(self):
-        """
-        Uses tuples for path tracking, ensuring immutability and fast deduplication.
-        """
-
-        clauses = self.generate_flat_dnf_set()
-        # variables = sorted({abs(lit) for clause in clauses for lit in clause})  # Extract sorted variables
-        variables = sorted({abs(v) for clause in clauses for lit in clause for v in lit})  # Extract sorted variables
-        var_index = {var: i for i, var in enumerate(variables)}  # Map variables to tuple index
-        num_vars = len(var_index)
-    
-        paths = {tuple([0] * num_vars)}  # Initial path (all variables unassigned)
-        
-        for clause in clauses:
-            new_paths = set()  # Store unique new paths
-    
-            for path in paths:
-                local_new_paths = set()
-    
-                # for lit in clause:
-                for c in clause:
-                    new_path = list(path)  # Convert tuple to list for modification
-                    jump_out = False
-                    for lit in c:
-                        var_idx = var_index[abs(lit)]
-                        sign = 1 if lit > 0 else -1
-                        if path[var_idx] == -sign:  # Conflict: discard this path
-                            # continue
-                            jump_out = True
-                            break
-                        new_path[var_idx] = sign
-                    # if path[var_idx] == 0:  # Unassigned variable, create a new path
-                    if not jump_out:  # Unassigned variable, create a new path
-                        # new_path[var_idx] = sign
-                        local_new_paths.add(tuple(new_path))  # Convert back to tuple for O(1) lookup
-    
-                if local_new_paths:
-                    new_paths.update(local_new_paths)
-    
-            # **Drop Old Paths Explicitly**  
-            paths = new_paths  # Only retain the new unique paths
-            # print("len(paths)", len(paths))
-            if not paths:  # If all paths are invalidated, return UNSAT
-                return False  
-
-        return True  # If at least one valid path remains, return SAT
                         
 # if __name__ == "__main__":
 test_cases = [
@@ -432,6 +434,20 @@ for i, case in enumerate(test_cases):
     print(f"\n🔹 **Test {i+1}**")
     print("Input CNF:", case["input"])
     print("Reduced CNF:", reducer.reduced_cnf)
+    print("CNFReducer.is_satisfiable():", CNFReducer.is_satisfiable(case["input"]))
+    print("CNFReducer.is_satisfiable():", CNFReducer.is_satisfiable(case["input"], bfs_mode=True))
+    # if isinstance(case["expected"], list):
+    #     if reducer.reduced_cnf == case["expected"]:
+    #         print("✅ Test Passed")
+    #     else:
+    #         print("❌ Test Failed")
+    # print(reducer.convert_to_dnf())
+
+# flat_reduced_cnf = reducer.generate_flat_dnf_set()
+# flat_reduced_cnf
+
+
+print("Reduced CNF:", reducer.reduced_cnf)
     print("CNFReducer.is_satisfiable():", CNFReducer.is_satisfiable(case["input"]))
     print("CNFReducer.is_satisfiable():", CNFReducer.is_satisfiable(case["input"], bfs_mode=True))
     # if isinstance(case["expected"], list):
